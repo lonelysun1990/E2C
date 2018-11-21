@@ -1,8 +1,50 @@
 from layers import *
 
 from keras import backend as K
-from keras.layers import Input, Flatten, Dense, Lambda, Reshape
+from keras.layers import Input, Flatten, Dense, Lambda, Reshape, BatchNormalization
 from keras.models import Model
+from keras.layers.merge import Add, Multiply
+
+def create_trans(latent_dim, u_dim):
+    zt = Input(shape=(latent_dim,))
+    zt_mean = Input(shape=(latent_dim,))
+    # zt_logvar = Input(shape=(latent_dim,))
+    ut = Input(shape=(u_dim,))
+
+    trans_encoder = create_trans_encoder(latent_dim)
+    hz = trans_encoder(zt)
+
+    At = Dense(latent_dim*latent_dim)(hz)
+    At = Reshape((latent_dim, latent_dim))(At)
+    # At_transpose = K.permute_dimensions(At, (0, 2, 1))
+
+    Bt = Dense(latent_dim*u_dim)(hz)
+    Bt = Reshape((latent_dim, u_dim))(Bt)
+
+    batch_dot_layer = Lambda(lambda x: K.batch_dot(x[0], x[1]))
+
+    zt1 = Add()([batch_dot_layer([At, zt]), batch_dot_layer([Bt, ut])])
+    zt1_mean = Add()([batch_dot_layer([At, zt_mean]), batch_dot_layer([Bt, ut])])
+    # zt1_logvar = Multiply()([K.batch_dot(At, At_transpose), zt_logvar])
+
+    # trans = Model([zt, zt_mean, ut], [zt1, zt1_mean, zt1_logvar])
+    trans = Model([zt, zt_mean, ut], [zt1, zt1_mean])
+
+    return trans
+
+
+def create_trans_encoder(latent_dim):
+    zt = Input(shape=(latent_dim,))
+
+    # Embed z to hz
+    hidden_dim = 200
+    hz = fc_bn_relu(hidden_dim)(zt)
+    hz = fc_bn_relu(hidden_dim)(hz)
+    hz = fc_bn_relu(latent_dim)(hz)
+
+    trans_encoder = Model(zt, hz)
+
+    return trans_encoder
 
 
 def create_encoder(latent_dim, input_shape):

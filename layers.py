@@ -4,9 +4,19 @@ from keras.layers.merge import add
 from keras.engine import InputSpec
 from keras.layers.core import Activation
 from keras.layers.convolutional import Conv2D, UpSampling2D
-from keras.layers import BatchNormalization
+from keras.layers import BatchNormalization, Dense
 
 import tensorflow as tf
+
+
+def fc_bn_relu(hidden_dim):
+    def fc_func(x):
+        x = Dense(hidden_dim, activation=None)(x)
+        x = BatchNormalization()(x)
+        x = Activation("relu")(x)
+        return x
+
+    return fc_func
 
 
 def conv_bn_relu(nb_filter, nb_row, nb_col, stride):
