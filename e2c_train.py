@@ -1,13 +1,13 @@
 import numpy as np
 import h5py
 
-import e2c as vae_util
+import e2c as e2c_util
 
 # os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 # The GPU id to use, usually either "0" or "1"
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="3"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 from keras import backend as K
 from keras.layers import Input
@@ -44,10 +44,10 @@ def create_e2c(latent_dim, u_dim, input_shape):
         additionally returned.
     '''
 
-    encoder_ = vae_util.create_encoder(latent_dim, input_shape)
-    decoder_ = vae_util.create_decoder(latent_dim, input_shape)
-    transition_ = vae_util.create_trans(latent_dim, u_dim)
-    sampler_ = vae_util.create_sampler()
+    encoder_ = e2c_util.create_encoder(latent_dim, input_shape)
+    decoder_ = e2c_util.create_decoder(latent_dim, input_shape)
+    transition_ = e2c_util.create_trans(latent_dim, u_dim)
+    sampler_ = e2c_util.create_sampler()
 
     return encoder_, decoder_, transition_, sampler_
 
@@ -64,11 +64,14 @@ if __name__ == "__main__":
 #     case_name = '9w_bhp'
     case_name = '9w_bhp_rate'
     
-#     suffix = '_single_out_rel_2'
-    suffix = '_fix_wl_rel_1'
+#     case_suffix = '_single_out_rel_2'
+    case_suffix = '_fix_wl_rel_1'
+#     case_suffix = '_single_out_rel_3'
+    train_suffix = '_no_p'
     
-    train_file = case_name + '_e2c_train' + suffix + '_n6600_dt20day_nt22_nrun300.mat'
-    eval_file = case_name + '_e2c_eval' + suffix + '_n2200_dt20day_nt22_nrun100.mat'
+    
+    train_file = case_name + '_e2c_train' + case_suffix + '_n6600_dt20day_nt22_nrun300.mat'
+    eval_file = case_name + '_e2c_eval' + case_suffix + '_n2200_dt20day_nt22_nrun100.mat'
 
     #################### model specification ##################
     epoch = 10
@@ -113,7 +116,7 @@ if __name__ == "__main__":
     # Compute loss
     loss_rec_t = reconstruction_loss(xt, xt_rec)
     loss_rec_t1 = reconstruction_loss(xt1, xt1_pred)
-    loss_kl = kl_normal_loss(zt_mean, zt_logvar, 0., 0.)
+    loss_kl = kl_normal_loss(zt_mean, zt_logvar, 0., 0.)  # log(1.) = 0.
     loss_bound = loss_rec_t + loss_rec_t1 + loss_kl
 
     # loss_trans = kl_normal_loss(zt1_mean_pred, zt1_logvar_pred, zt1_mean, zt1_logvar)
@@ -121,7 +124,7 @@ if __name__ == "__main__":
     # Use zt_logvar to approximate zt1_logvar_pred
     loss_trans = kl_normal_loss(zt1_mean_pred, zt_logvar, zt1_mean, zt1_logvar)
 
-    trans_loss_weight = 1.0
+    trans_loss_weight = 1.0 # lambda in E2C paper Eq. (11)
     loss = loss_bound + trans_loss_weight * loss_trans
 
     opt = Adam(lr=learning_rate)
@@ -156,11 +159,11 @@ if __name__ == "__main__":
         print('Epoch %d/%d, Train loss %f, Eval loss %f' % (e + 1, epoch, output[0], eval_loss_val[0]))
 
     
-    encoder.save_weights(output_dir + 'e2c_encoder_' + case_name + suffix + '_nt%d_l%d_lr%.0e_ep%d.h5' \
+    encoder.save_weights(output_dir + 'e2c_encoder_' + case_name + case_suffix + train_suffix+'_nt%d_l%d_lr%.0e_ep%d.h5' \
                          % (num_train, latent_dim, learning_rate, epoch))
-    decoder.save_weights(output_dir + 'e2c_decoder_' + case_name + suffix + '_nt%d_l%d_lr%.0e_ep%d.h5' \
+    decoder.save_weights(output_dir + 'e2c_decoder_' + case_name + case_suffix + train_suffix+'_nt%d_l%d_lr%.0e_ep%d.h5' \
                          % (num_train, latent_dim, learning_rate, epoch))
-    transition.save_weights(output_dir + 'e2c_transition_' + case_name + suffix + '_nt%d_l%d_lr%.0e_ep%d.h5' \
+    transition.save_weights(output_dir + 'e2c_transition_' + case_name + case_suffix + train_suffix+'_nt%d_l%d_lr%.0e_ep%d.h5' \
                             % (num_train, latent_dim, learning_rate, epoch))
 
 

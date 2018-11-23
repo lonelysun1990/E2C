@@ -6,6 +6,10 @@ from keras.models import Model
 from keras.layers.merge import Add, Multiply
 
 def create_trans(latent_dim, u_dim):
+    '''
+    Creates a linear transition model in latent space.
+
+    '''
     zt = Input(shape=(latent_dim,))
     zt_mean = Input(shape=(latent_dim,))
     # zt_logvar = Input(shape=(latent_dim,))
@@ -34,6 +38,11 @@ def create_trans(latent_dim, u_dim):
 
 
 def create_trans_encoder(latent_dim):
+    '''
+    Creates FC transition model.
+
+    '''
+    
     zt = Input(shape=(latent_dim,))
 
     # Embed z to hz
@@ -49,12 +58,8 @@ def create_trans_encoder(latent_dim):
 
 def create_encoder(latent_dim, input_shape):
     '''
-    Creates a convolutional encoder model for MNIST images.
+    Creates a convolutional encoder model.
 
-    - Input for the created model are MNIST images.
-    - Output of the created model are the sufficient statistics
-      of the variational distriution q(t|x;phi), mean and log
-      variance.
     '''
     encoder_iput = Input(shape=input_shape, name='image')
 
@@ -76,11 +81,9 @@ def create_encoder(latent_dim, input_shape):
 
 def create_decoder(latent_dim, input_shape):
     '''
-    Creates a (de-)convolutional decoder model for MNIST images.
+    Creates a (de-)convolutional decoder model.
 
-    - Input for the created model are latent vectors t.
-    - Output of the model are images of shape (28, 28, 1) where
-      the value of each pixel is the probability of being white.
+
     '''
     decoder_input = Input(shape=(latent_dim,), name='t')
 
@@ -114,7 +117,8 @@ def sample(args):
     '''
     t_mean, t_log_var = args
     t_sigma = K.sqrt(K.exp(t_log_var))
-    # epsilon = K.random_normal(shape=K.shape(t_mean), mean=0., stddev=1.)
+    epsilon = K.random_normal(shape=K.shape(t_mean), mean=0., stddev=1.)
+#     return t_mean + t_sigma * epsilon
     return t_mean + t_sigma * 0
 
 
@@ -123,4 +127,16 @@ def create_sampler():
     Creates a sampling layer.
     '''
     return Lambda(sample, name='sampler')
+
+
+# ---------------------------------------------------
+#
+# modified by Larry from Yimin's first implementation
+#
+# ---------------------------------------------------
+
+def sample_normal(mu, log_var):
+    sigma = K.sqrt(K.exp(log_var))
+    epsilon = K.random.normal(shape=K.shape(mu), mean=0., stddev=1.)
+    return mu + sigma * epsilon
 
