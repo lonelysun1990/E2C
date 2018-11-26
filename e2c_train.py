@@ -67,11 +67,11 @@ if __name__ == "__main__":
 #     case_suffix = '_single_out_rel_2'
     case_suffix = '_fix_wl_rel_1'
 #     case_suffix = '_single_out_rel_3'
-    train_suffix = '_no_p'
+    train_suffix = '_with_p'
     
     
-    train_file = case_name + '_e2c_train' + case_suffix + '_n6600_dt20day_nt22_nrun300.mat'
-    eval_file = case_name + '_e2c_eval' + case_suffix + '_n2200_dt20day_nt22_nrun100.mat'
+    train_file = case_name + '_e2c_train' + case_suffix +train_suffix + '_n6600_dt20day_nt22_nrun300.mat'
+    eval_file = case_name + '_e2c_eval' + case_suffix + train_suffix +'_n2200_dt20day_nt22_nrun100.mat'
 
     #################### model specification ##################
     epoch = 10
@@ -82,21 +82,22 @@ if __name__ == "__main__":
     
     # load data
     hf_r = h5py.File(data_dir + train_file, 'r')
-    sat_t_train = np.array(hf_r.get('sat_t'))
-    sat_t1_train = np.array(hf_r.get('sat_t1'))
+    state_t_train = np.array(hf_r.get('state_t'))
+    state_t1_train = np.array(hf_r.get('state_t1'))
     bhp_train = np.array(hf_r.get('bhp'))
     hf_r.close()
+#     print("shape of state_t_train:{}".format(state_t_train.shape))
 
-    num_train = sat_t_train.shape[0]
+    num_train = state_t_train.shape[0]
 
     hf_r = h5py.File(data_dir + eval_file, 'r')
-    sat_t_eval = np.array(hf_r.get('sat_t'))
-    sat_t1_eval = np.array(hf_r.get('sat_t1'))
+    state_t_eval = np.array(hf_r.get('state_t'))
+    state_t1_eval = np.array(hf_r.get('state_t1'))
     bhp_eval = np.array(hf_r.get('bhp'))
     hf_r.close()
 
     # Construct E2C
-    input_shape = (60, 60, 1)
+    input_shape = (60, 60, 2)
     encoder, decoder, transition, sampler = create_e2c(latent_dim, u_dim, input_shape)
 
     xt = Input(shape=input_shape)
@@ -142,10 +143,10 @@ if __name__ == "__main__":
     for e in range(epoch):
         for ib in range(num_batch):
             ind0 = ib * batch_size
-            sat_t_batch = sat_t_train[ind0:ind0+batch_size, ...]
-            sat_t1_batch = sat_t1_train[ind0:ind0 + batch_size, ...]
+            state_t_batch = state_t_train[ind0:ind0+batch_size, ...]
+            state_t1_batch = state_t1_train[ind0:ind0 + batch_size, ...]
             bhp_batch = bhp_train[ind0:ind0 + batch_size, ...]
-            output = iterate([sat_t_batch, bhp_batch, sat_t1_batch])
+            output = iterate([state_t_batch, bhp_batch, state_t1_batch])
 
             # tf.session.run(feed_dict={xt: sat_t_batch, ut: bhp_batch, xt1: sat_t1_batch}, ...
             #                fetches= [loss, loss_rec_t, loss_rec_t1, loss_kl, loss_trans, updates])
@@ -154,7 +155,7 @@ if __name__ == "__main__":
             if ib % 10 == 0:
                 print('Epoch %d/%d, Batch %d/%d, Loss %f, Loss rec %f, loss rec t1 %f, loss kl %f, loss_trans %f'
                       % (e+1, epoch, ib+1, num_batch, output[0], output[1], output[2], output[3], output[4]))
-        eval_loss_val = eval_loss([sat_t_eval, bhp_eval, sat_t1_eval])
+        eval_loss_val = eval_loss([state_t_eval, bhp_eval, state_t1_eval])
 
         print('Epoch %d/%d, Train loss %f, Eval loss %f' % (e + 1, epoch, output[0], eval_loss_val[0]))
 

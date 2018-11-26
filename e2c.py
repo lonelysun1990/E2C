@@ -98,7 +98,7 @@ def create_decoder(latent_dim, input_shape):
     x = dconv_bn_nolinear(64, 3, 3, stride=(2, 2))(x)
     x = dconv_bn_nolinear(32, 3, 3, stride=(1, 1))(x)
     x = dconv_bn_nolinear(16, 3, 3, stride=(2, 2))(x)
-    y = Conv2D(1, (3, 3), padding='same', activation=None)(x)
+    y = Conv2D(input_shape[2], (3, 3), padding='same', activation=None)(x)
 
     return Model(decoder_input, y, name='decoder')
 
