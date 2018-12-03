@@ -3,3 +3,6 @@
 __pycache__/
 data/
 saved_models/
+
+e2c_obtain_xi.ipynb
+save_sequential_pred_results.ipynb

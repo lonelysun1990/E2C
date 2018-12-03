@@ -29,6 +29,31 @@ def kl_normal_loss(qm, q_logv, pm, p_logv):
     return K.mean(K.sum(kl, axis=-1))
 
 
+# def get_flux_loss(m, state, state_pred):
+#     # state, state_pred shape (batch_size, 60, 60, 2)
+#     # p, p_pred shape (batch_size, 60, 60, 1)
+#     # k shape (batch_size, 60, 60, 1)
+    
+#     # Only consider discrepancies in total flux, not in phases (saturation not used) 
+
+#     perm = K.exp(m)
+#     p = state[:, :, :, 1]
+#     p_pred = state_pred[:, :, :, 1]
+    
+#     tran_x = 1./perm[1:, ...] + 1./perm[:-1, ...]
+#     tran_y = 1./perm[:, 1:, ...] + 1./perm[:, :-1, ...]
+#     flux_x = (p[:, 1:, ...] - p[:, :-1, ...]) / tran_x
+#     flux_y = (p[:, :, 1:, :] - p[:, :, :-1, :]) / tran_y
+#     flux_x_pred = (p_pred[:, 1:, ...] - p_pred[:, :-1, ...]) / tran_x
+#     flux_y_pred = (p_pred[:, :, 1:, :] - p_pred[:, :, :-1, :]) / tran_y
+
+#     loss_x = K.sum(K.abs(K.batch_flatten(flux_x) - K.batch_flatten(flux_x_pred)), axis=-1)
+#     loss_y = K.sum(K.abs(K.batch_flatten(flux_y) - K.batch_flatten(flux_y_pred)), axis=-1)
+
+#     loss_flux = K.mean(loss_x + loss_y)
+#     return loss_flux
+
+
 def create_e2c(latent_dim, u_dim, input_shape):
     '''
     Creates a E2C.
@@ -86,7 +111,6 @@ if __name__ == "__main__":
     state_t1_train = np.array(hf_r.get('state_t1'))
     bhp_train = np.array(hf_r.get('bhp'))
     hf_r.close()
-#     print("shape of state_t_train:{}".format(state_t_train.shape))
 
     num_train = state_t_train.shape[0]
 
@@ -95,6 +119,9 @@ if __name__ == "__main__":
     state_t1_eval = np.array(hf_r.get('state_t1'))
     bhp_eval = np.array(hf_r.get('bhp'))
     hf_r.close()
+    
+    m = np.loadtxt("mnist2500_X.txt")
+    m = m.reshape(60,60,1)
 
     # Construct E2C
     input_shape = (60, 60, 2)
@@ -117,17 +144,24 @@ if __name__ == "__main__":
     # Compute loss
     loss_rec_t = reconstruction_loss(xt, xt_rec)
     loss_rec_t1 = reconstruction_loss(xt1, xt1_pred)
+    
+#     loss_flux_t = get_flux_loss(m, xt, xt_rec) / 100.
+#     loss_flux_t1 = get_flux_loss(m, xt1, xt1_pred) / 100.
+    
     loss_kl = kl_normal_loss(zt_mean, zt_logvar, 0., 0.)  # log(1.) = 0.
-    loss_bound = loss_rec_t + loss_rec_t1 + loss_kl
+    loss_bound = loss_rec_t + loss_rec_t1 + loss_kl  # + loss_flux_t + loss_flux_t1
 
     # loss_trans = kl_normal_loss(zt1_mean_pred, zt1_logvar_pred, zt1_mean, zt1_logvar)
 
     # Use zt_logvar to approximate zt1_logvar_pred
     loss_trans = kl_normal_loss(zt1_mean_pred, zt_logvar, zt1_mean, zt1_logvar)
 
+    
     trans_loss_weight = 1.0 # lambda in E2C paper Eq. (11)
     loss = loss_bound + trans_loss_weight * loss_trans
 
+    
+    # Optimization
     opt = Adam(lr=learning_rate)
 
     trainable_weights = encoder.trainable_weights + decoder.trainable_weights + transition.trainable_weights
