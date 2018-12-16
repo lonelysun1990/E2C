@@ -29,29 +29,30 @@ def kl_normal_loss(qm, q_logv, pm, p_logv):
     return K.mean(K.sum(kl, axis=-1))
 
 
-# def get_flux_loss(m, state, state_pred):
-#     # state, state_pred shape (batch_size, 60, 60, 2)
-#     # p, p_pred shape (batch_size, 60, 60, 1)
-#     # k shape (batch_size, 60, 60, 1)
+def get_flux_loss(m, state, state_pred):
+    # state, state_pred shape (batch_size, 60, 60, 2)
+    # p, p_pred shape (batch_size, 60, 60, 1)
+    # k shape (batch_size, 60, 60, 1)
     
-#     # Only consider discrepancies in total flux, not in phases (saturation not used) 
-
-#     perm = K.exp(m)
-#     p = state[:, :, :, 1]
-#     p_pred = state_pred[:, :, :, 1]
+    # Only consider discrepancies in total flux, not in phases (saturation not used) 
     
-#     tran_x = 1./perm[1:, ...] + 1./perm[:-1, ...]
-#     tran_y = 1./perm[:, 1:, ...] + 1./perm[:, :-1, ...]
-#     flux_x = (p[:, 1:, ...] - p[:, :-1, ...]) / tran_x
-#     flux_y = (p[:, :, 1:, :] - p[:, :, :-1, :]) / tran_y
-#     flux_x_pred = (p_pred[:, 1:, ...] - p_pred[:, :-1, ...]) / tran_x
-#     flux_y_pred = (p_pred[:, :, 1:, :] - p_pred[:, :, :-1, :]) / tran_y
+    perm = K.exp(m)
+    p = K.expand_dims(state[:, :, :, 1],-1)
+    p_pred = K.expand_dims(state_pred[:, :, :, 1],-1)
+    
+    tran_x = 1./perm[:, 1:, ...] + 1./perm[:, :-1, ...]
+    tran_y = 1./perm[:, :, 1:, ...] + 1./perm[:, :, :-1, ...]
+    
+    flux_x = (p[:, 1:, ...] - p[:, :-1, ...]) / tran_x
+    flux_y = (p[:, :, 1:, :] - p[:, :, :-1, :]) / tran_y
+    flux_x_pred = (p_pred[:, 1:, ...] - p_pred[:, :-1, ...]) / tran_x
+    flux_y_pred = (p_pred[:, :, 1:, :] - p_pred[:, :, :-1, :]) / tran_y
 
-#     loss_x = K.sum(K.abs(K.batch_flatten(flux_x) - K.batch_flatten(flux_x_pred)), axis=-1)
-#     loss_y = K.sum(K.abs(K.batch_flatten(flux_y) - K.batch_flatten(flux_y_pred)), axis=-1)
+    loss_x = K.sum(K.abs(K.batch_flatten(flux_x) - K.batch_flatten(flux_x_pred)), axis=-1)
+    loss_y = K.sum(K.abs(K.batch_flatten(flux_y) - K.batch_flatten(flux_y_pred)), axis=-1)
 
-#     loss_flux = K.mean(loss_x + loss_y)
-#     return loss_flux
+    loss_flux = K.mean(loss_x + loss_y)
+    return loss_flux
 
 
 def create_e2c(latent_dim, u_dim, input_shape):
@@ -93,9 +94,10 @@ if __name__ == "__main__":
     case_suffix = '_fix_wl_rel_1'
 #     case_suffix = '_single_out_rel_3'
     train_suffix = '_with_p'
+    model_suffix = '_flux_loss'
     
     
-    train_file = case_name + '_e2c_train' + case_suffix +train_suffix + '_n6600_dt20day_nt22_nrun300.mat'
+    train_file = case_name + '_e2c_train' + case_suffix + train_suffix + '_n6600_dt20day_nt22_nrun300.mat'
     eval_file = case_name + '_e2c_eval' + case_suffix + train_suffix +'_n2200_dt20day_nt22_nrun100.mat'
 
     #################### model specification ##################
@@ -104,6 +106,7 @@ if __name__ == "__main__":
     learning_rate = 1e-4
     latent_dim = 50
     u_dim = 9 # control dimension
+    flux_loss_weight = 1/1000.
     
     # load data
     hf_r = h5py.File(data_dir + train_file, 'r')
@@ -120,10 +123,16 @@ if __name__ == "__main__":
     bhp_eval = np.array(hf_r.get('bhp'))
     hf_r.close()
     
-    m = np.loadtxt("mnist2500_X.txt")
+    
+    ############# Construct E2C (begin computation graph) ####################
+    m = np.loadtxt("/data/cees/zjin/lstm_rom/sim_runs/case4_9w_bhp_rate/template/logk1.dat")
     m = m.reshape(60,60,1)
+    m_tf = Input(shape = (60, 60 ,1))
+    m_eval = np.repeat(np.expand_dims(m, axis = 0), state_t_eval.shape[0], axis = 0)
+    m = np.repeat(np.expand_dims(m,axis = 0), state_t_train.shape[0], axis = 0)
+    
 
-    # Construct E2C
+    
     input_shape = (60, 60, 2)
     encoder, decoder, transition, sampler = create_e2c(latent_dim, u_dim, input_shape)
 
@@ -145,21 +154,23 @@ if __name__ == "__main__":
     loss_rec_t = reconstruction_loss(xt, xt_rec)
     loss_rec_t1 = reconstruction_loss(xt1, xt1_pred)
     
-#     loss_flux_t = get_flux_loss(m, xt, xt_rec) / 100.
-#     loss_flux_t1 = get_flux_loss(m, xt1, xt1_pred) / 100.
+    loss_flux_t = get_flux_loss(m_tf, xt, xt_rec) * flux_loss_weight
+    loss_flux_t1 = get_flux_loss(m_tf, xt1, xt1_pred) * flux_loss_weight
     
     loss_kl = kl_normal_loss(zt_mean, zt_logvar, 0., 0.)  # log(1.) = 0.
-    loss_bound = loss_rec_t + loss_rec_t1 + loss_kl  # + loss_flux_t + loss_flux_t1
+    loss_bound = loss_rec_t + loss_rec_t1 + loss_kl  + loss_flux_t + loss_flux_t1
 
-    # loss_trans = kl_normal_loss(zt1_mean_pred, zt1_logvar_pred, zt1_mean, zt1_logvar)
+    
 
     # Use zt_logvar to approximate zt1_logvar_pred
+    # loss_trans = kl_normal_loss(zt1_mean_pred, zt1_logvar_pred, zt1_mean, zt1_logvar)
     loss_trans = kl_normal_loss(zt1_mean_pred, zt_logvar, zt1_mean, zt1_logvar)
 
     
     trans_loss_weight = 1.0 # lambda in E2C paper Eq. (11)
     loss = loss_bound + trans_loss_weight * loss_trans
-
+    
+    ############### (End compuation graph) ####################
     
     # Optimization
     opt = Adam(lr=learning_rate)
@@ -168,9 +179,9 @@ if __name__ == "__main__":
 
     updates = opt.get_updates(loss, trainable_weights)
 
-    iterate = K.function([xt, ut, xt1], [loss, loss_rec_t, loss_rec_t1, loss_kl, loss_trans], updates=updates)
+    iterate = K.function([xt, ut, xt1, m_tf], [loss, loss_rec_t, loss_rec_t1, loss_kl, loss_trans, loss_flux_t, loss_flux_t1], updates=updates)
 
-    eval_loss = K.function([xt, ut, xt1], [loss])
+    eval_loss = K.function([xt, ut, xt1, m_tf], [loss])
 
     num_batch = int(num_train/batch_size)
 
@@ -180,25 +191,27 @@ if __name__ == "__main__":
             state_t_batch = state_t_train[ind0:ind0+batch_size, ...]
             state_t1_batch = state_t1_train[ind0:ind0 + batch_size, ...]
             bhp_batch = bhp_train[ind0:ind0 + batch_size, ...]
-            output = iterate([state_t_batch, bhp_batch, state_t1_batch])
+            m_batch = m[ind0:ind0 + batch_size, ...]
+            
+            output = iterate([state_t_batch, bhp_batch, state_t1_batch, m_batch])
 
             # tf.session.run(feed_dict={xt: sat_t_batch, ut: bhp_batch, xt1: sat_t1_batch}, ...
             #                fetches= [loss, loss_rec_t, loss_rec_t1, loss_kl, loss_trans, updates])
             # But output tensor for the updates operation is not returned
 
             if ib % 10 == 0:
-                print('Epoch %d/%d, Batch %d/%d, Loss %f, Loss rec %f, loss rec t1 %f, loss kl %f, loss_trans %f'
-                      % (e+1, epoch, ib+1, num_batch, output[0], output[1], output[2], output[3], output[4]))
-        eval_loss_val = eval_loss([state_t_eval, bhp_eval, state_t1_eval])
+                print('Epoch %d/%d, Batch %d/%d, Loss %f, Loss rec %f, loss rec t1 %f, loss kl %f, loss_trans %f, loss flux %f, loss flux t1 %f'
+                      % (e+1, epoch, ib+1, num_batch, output[0], output[1], output[2], output[3], output[4], output[5], output[6]))
+        eval_loss_val = eval_loss([state_t_eval, bhp_eval, state_t1_eval, m_eval])
 
         print('Epoch %d/%d, Train loss %f, Eval loss %f' % (e + 1, epoch, output[0], eval_loss_val[0]))
 
     
-    encoder.save_weights(output_dir + 'e2c_encoder_' + case_name + case_suffix + train_suffix+'_nt%d_l%d_lr%.0e_ep%d.h5' \
+    encoder.save_weights(output_dir + 'e2c_encoder_' + case_name + case_suffix + train_suffix + model_suffix + '_nt%d_l%d_lr%.0e_ep%d.h5' \
                          % (num_train, latent_dim, learning_rate, epoch))
-    decoder.save_weights(output_dir + 'e2c_decoder_' + case_name + case_suffix + train_suffix+'_nt%d_l%d_lr%.0e_ep%d.h5' \
+    decoder.save_weights(output_dir + 'e2c_decoder_' + case_name + case_suffix + train_suffix + model_suffix + '_nt%d_l%d_lr%.0e_ep%d.h5' \
                          % (num_train, latent_dim, learning_rate, epoch))
-    transition.save_weights(output_dir + 'e2c_transition_' + case_name + case_suffix + train_suffix+'_nt%d_l%d_lr%.0e_ep%d.h5' \
+    transition.save_weights(output_dir + 'e2c_transition_' + case_name + case_suffix + train_suffix + model_suffix + '_nt%d_l%d_lr%.0e_ep%d.h5' \
                             % (num_train, latent_dim, learning_rate, epoch))
 
 

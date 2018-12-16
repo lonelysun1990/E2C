@@ -81,7 +81,7 @@ def create_encoder(latent_dim, input_shape):
 
 def create_decoder(latent_dim, input_shape):
     '''
-    Creates a (de-)convolutional decoder model.
+    Creates a (trans-)convolutional decoder model.
 
 
     '''
