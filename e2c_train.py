@@ -14,6 +14,7 @@ from keras.layers import Input
 from keras.models import Model
 from keras.optimizers import Adam
 
+
 def reconstruction_loss(x, t_decoded):
     '''Reconstruction loss for the plain VAE'''
     v = 0.1
@@ -22,11 +23,12 @@ def reconstruction_loss(x, t_decoded):
     # return K.sum((K.batch_flatten(x) - K.batch_flatten(t_decoded)) ** 2, axis=-1)
 
 
-def kl_normal_loss(qm, q_logv, pm, p_logv):
+def l2_reg_loss(qm):
     # 0.5 * (torch.log(pv) - torch.log(qv) + qv / pv + (qm - pm).pow(2) / pv - 1)
     # -0.5 * K.sum(1 + t_log_var - K.square(t_mean) - K.exp(t_log_var), axis=-1)
-    kl = -0.5 * (1 - p_logv + q_logv - K.exp(q_logv) / K.exp(p_logv) - K.square(qm - pm) / K.exp(p_logv))
-    return K.mean(K.sum(kl, axis=-1))
+#     kl = -0.5 * (1 - p_logv + q_logv - K.exp(q_logv) / K.exp(p_logv) - K.square(qm - pm) / K.exp(p_logv))
+    l2_reg = 0.5*K.square(qm)
+    return K.mean(K.sum(l2_reg, axis=-1))
 
 
 def get_flux_loss(m, state, state_pred):
@@ -37,12 +39,13 @@ def get_flux_loss(m, state, state_pred):
     # Only consider discrepancies in total flux, not in phases (saturation not used) 
     
     perm = K.exp(m)
-    p = K.expand_dims(state[:, :, :, 1],-1)
-    p_pred = K.expand_dims(state_pred[:, :, :, 1],-1)
+    p = K.expand_dims(state[:, :, :, 1], -1)
+    p_pred = K.expand_dims(state_pred[:, :, :, 1], -1)
+
+    #print(K.in_shape(xxx))
     
     tran_x = 1./perm[:, 1:, ...] + 1./perm[:, :-1, ...]
     tran_y = 1./perm[:, :, 1:, ...] + 1./perm[:, :, :-1, ...]
-    
     flux_x = (p[:, 1:, ...] - p[:, :-1, ...]) / tran_x
     flux_y = (p[:, :, 1:, :] - p[:, :, :-1, :]) / tran_y
     flux_x_pred = (p_pred[:, 1:, ...] - p_pred[:, :-1, ...]) / tran_x
@@ -73,9 +76,8 @@ def create_e2c(latent_dim, u_dim, input_shape):
     encoder_ = e2c_util.create_encoder(latent_dim, input_shape)
     decoder_ = e2c_util.create_decoder(latent_dim, input_shape)
     transition_ = e2c_util.create_trans(latent_dim, u_dim)
-    sampler_ = e2c_util.create_sampler()
 
-    return encoder_, decoder_, transition_, sampler_
+    return encoder_, decoder_, transition_
 
 
 # Create plain E2C model and associated loss operations

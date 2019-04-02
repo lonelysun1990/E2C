@@ -3,7 +3,7 @@ from layers import *
 from keras import backend as K
 from keras.layers import Input, Flatten, Dense, Lambda, Reshape, BatchNormalization
 from keras.models import Model
-from keras.layers.merge import Add, Multiply
+from keras.layers.merge import Add, Multiply, Concatenate
 
 def create_trans(latent_dim, u_dim):
     '''
@@ -11,45 +11,53 @@ def create_trans(latent_dim, u_dim):
 
     '''
     zt = Input(shape=(latent_dim,))
-    zt_mean = Input(shape=(latent_dim,))
-    # zt_logvar = Input(shape=(latent_dim,))
+    dt = Input(shape=(1,))
     ut = Input(shape=(u_dim,))
+    
+    zt_expand = Concatenate(axis=-1)([zt, dt])
+    
+    
 
-    trans_encoder = create_trans_encoder(latent_dim)
-    hz = trans_encoder(zt)
+    trans_encoder = create_trans_encoder(latent_dim + 1)
+    hz = trans_encoder(zt_expand)
 
     At = Dense(latent_dim*latent_dim)(hz)
     At = Reshape((latent_dim, latent_dim))(At)
-    # At_transpose = K.permute_dimensions(At, (0, 2, 1))
 
     Bt = Dense(latent_dim*u_dim)(hz)
     Bt = Reshape((latent_dim, u_dim))(Bt)
 
     batch_dot_layer = Lambda(lambda x: K.batch_dot(x[0], x[1]))
+    
+    scalar_multi = Lambda(lambda x: x[0] * x[1]) # Larry Jin
+    ut_dt = scalar_multi([ut, dt]) # Larry Jin
+    
+    
+#     zt1 = Add()([batch_dot_layer([At, zt]), batch_dot_layer([Bt, ut])]) 
+    zt1 = Add()([batch_dot_layer([At, zt]), batch_dot_layer([Bt, ut_dt])]) # Larry Jin
+    
+    # At*zt + Bt*ut
+    
+    # what if I want: At*zt + Bt*ut*dt
 
-    zt1 = Add()([batch_dot_layer([At, zt]), batch_dot_layer([Bt, ut])])
-    zt1_mean = Add()([batch_dot_layer([At, zt_mean]), batch_dot_layer([Bt, ut])])
-    # zt1_logvar = Multiply()([K.batch_dot(At, At_transpose), zt_logvar])
-
-    # trans = Model([zt, zt_mean, ut], [zt1, zt1_mean, zt1_logvar])
-    trans = Model([zt, zt_mean, ut], [zt1, zt1_mean])
+    trans = Model([zt, ut, dt], [zt1])
 
     return trans
 
 
-def create_trans_encoder(latent_dim):
+def create_trans_encoder(input_dim):
     '''
     Creates FC transition model.
 
     '''
     
-    zt = Input(shape=(latent_dim,))
+    zt = Input(shape=(input_dim,))
 
     # Embed z to hz
     hidden_dim = 200
     hz = fc_bn_relu(hidden_dim)(zt)
     hz = fc_bn_relu(hidden_dim)(hz)
-    hz = fc_bn_relu(latent_dim)(hz)
+    hz = fc_bn_relu(input_dim-1)(hz) # make sure dim of hz is consistent with 
 
     trans_encoder = Model(zt, hz)
 
@@ -73,10 +81,10 @@ def create_encoder(latent_dim, input_shape):
 
     x = Flatten()(x)
 
-    t_mean = Dense(latent_dim, name='t_mean')(x)
-    t_log_var = Dense(latent_dim, name='t_log_var')(x)
+    xi = Dense(latent_dim, name='t_mean')(x)
+#     t_log_var = Dense(latent_dim, name='t_log_var')(x)
 
-    return Model(encoder_iput, [t_mean, t_log_var], name='encoder')
+    return Model(encoder_iput, xi, name='encoder')
 
 
 def create_decoder(latent_dim, input_shape):
@@ -103,30 +111,30 @@ def create_decoder(latent_dim, input_shape):
     return Model(decoder_input, y, name='decoder')
 
 
-def sample(args):
-    '''
-    Draws samples from a standard normal and scales the samples with
-    standard deviation of the variational distribution and shifts them
-    by the mean.
+# def sample(args):
+#     '''
+#     Draws samples from a standard normal and scales the samples with
+#     standard deviation of the variational distribution and shifts them
+#     by the mean.
 
-    Args:
-        args: sufficient statistics of the variational distribution.
+#     Args:
+#         args: sufficient statistics of the variational distribution.
 
-    Returns:
-        Samples from the variational distribution.
-    '''
-    t_mean, t_log_var = args
-    t_sigma = K.sqrt(K.exp(t_log_var))
-    epsilon = K.random_normal(shape=K.shape(t_mean), mean=0., stddev=1.)
-#     return t_mean + t_sigma * epsilon
-    return t_mean + t_sigma * 0
+#     Returns:
+#         Samples from the variational distribution.
+#     '''
+#     t_mean, t_log_var = args
+#     t_sigma = K.sqrt(K.exp(t_log_var))
+#     epsilon = K.random_normal(shape=K.shape(t_mean), mean=0., stddev=1.)
+# #     return t_mean + t_sigma * epsilon
+#     return t_mean + t_sigma * 0
 
 
-def create_sampler():
-    '''
-    Creates a sampling layer.
-    '''
-    return Lambda(sample, name='sampler')
+# def create_sampler():
+#     '''
+#     Creates a sampling layer.
+#     '''
+#     return Lambda(sample, name='sampler')
 
 
 # ---------------------------------------------------
@@ -135,8 +143,8 @@ def create_sampler():
 #
 # ---------------------------------------------------
 
-def sample_normal(mu, log_var):
-    sigma = K.sqrt(K.exp(log_var))
-    epsilon = K.random.normal(shape=K.shape(mu), mean=0., stddev=1.)
-    return mu + sigma * epsilon
+# def sample_normal(mu, log_var):
+#     sigma = K.sqrt(K.exp(log_var))
+#     epsilon = K.random.normal(shape=K.shape(mu), mean=0., stddev=1.)
+#     return mu + sigma * epsilon
 
