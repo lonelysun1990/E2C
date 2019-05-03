@@ -64,7 +64,7 @@ def create_trans_encoder(input_dim):
     return trans_encoder
 
 
-def create_encoder(latent_dim, input_shape):
+def create_encoder(latent_dim, input_shape, sigma=0.0):
     '''
     Creates a convolutional encoder model.
 
@@ -81,8 +81,10 @@ def create_encoder(latent_dim, input_shape):
 
     x = Flatten()(x)
 
-    xi = Dense(latent_dim, name='t_mean')(x)
+    xi_mean = Dense(latent_dim, name='t_mean')(x)
 #     t_log_var = Dense(latent_dim, name='t_log_var')(x)
+    sampler = create_sampler(sigma)
+    xi = sampler(xi_mean)
 
     return Model(encoder_iput, xi, name='encoder')
 
@@ -111,30 +113,27 @@ def create_decoder(latent_dim, input_shape):
     return Model(decoder_input, y, name='decoder')
 
 
-# def sample(args):
-#     '''
-#     Draws samples from a standard normal and scales the samples with
-#     standard deviation of the variational distribution and shifts them
-#     by the mean.
+def sample(t_mean, t_sigma):
+    '''
+    Draws samples from a standard normal and scales the samples with
+    standard deviation of the variational distribution and shifts them
+    by the mean.
 
-#     Args:
-#         args: sufficient statistics of the variational distribution.
+    Args:
+        args: sufficient statistics of the variational distribution.
 
-#     Returns:
-#         Samples from the variational distribution.
-#     '''
-#     t_mean, t_log_var = args
-#     t_sigma = K.sqrt(K.exp(t_log_var))
-#     epsilon = K.random_normal(shape=K.shape(t_mean), mean=0., stddev=1.)
-# #     return t_mean + t_sigma * epsilon
-#     return t_mean + t_sigma * 0
+    Returns:
+        Samples from the variational distribution.
+    '''
+    epsilon = K.random_normal(shape=K.shape(t_mean), mean=0., stddev=1.)
+    return t_mean + t_sigma * epsilon
 
 
-# def create_sampler():
-#     '''
-#     Creates a sampling layer.
-#     '''
-#     return Lambda(sample, name='sampler')
+def create_sampler(t_sigma):
+    '''
+    Creates a sampling layer.
+    '''
+    return Lambda(lambda x: sample(x, t_sigma), name='sampler')
 
 
 # ---------------------------------------------------
