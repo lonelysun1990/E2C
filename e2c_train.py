@@ -2,6 +2,7 @@ import numpy as np
 import h5py
 
 import e2c as e2c_util
+# import e2c_1 as e2c_util
 
 # os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 # The GPU id to use, usually either "0" or "1"
@@ -78,6 +79,29 @@ def create_e2c(latent_dim, u_dim, input_shape):
     transition_ = e2c_util.create_trans(latent_dim, u_dim)
 
     return encoder_, decoder_, transition_
+
+
+def create_e2c_var_wl(latent_dim, u_dim, input_shape):
+    '''
+    Creates a E2C.
+
+    Args:
+        latent_dim: dimensionality of latent space
+        return_kl_loss_op: whether to return the operation for
+                           computing the KL divergence loss.
+
+    Returns:
+        The VAE model. If return_kl_loss_op is True, then the
+        operation for computing the KL divergence loss is
+        additionally returned.
+    '''
+
+    encoder_ = e2c_util.create_encoder(latent_dim, input_shape)
+    decoder_ = e2c_util.create_decoder(latent_dim, input_shape)
+    transition_ = e2c_util.create_trans(latent_dim, u_dim)
+    wc_encoder_ = e2c_util.create_wc_encoder(latent_dim, input_shape)
+    
+    return encoder_, decoder_, transition_, wc_encoder_
 
 
 # Create plain E2C model and associated loss operations

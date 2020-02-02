@@ -69,9 +69,9 @@ def create_encoder(latent_dim, input_shape, sigma=0.0):
     Creates a convolutional encoder model.
 
     '''
-    encoder_iput = Input(shape=input_shape, name='image')
+    encoder_input = Input(shape=input_shape, name='image')
 
-    x = conv_bn_relu(16, 3, 3, stride=(2, 2))(encoder_iput)
+    x = conv_bn_relu(16, 3, 3, stride=(2, 2))(encoder_input)
     x = conv_bn_relu(32, 3, 3, stride=(1, 1))(x)
     x = conv_bn_relu(64, 3, 3, stride=(2, 2))(x)
     x = conv_bn_relu(128, 3, 3, stride=(1, 1))(x)
@@ -86,7 +86,28 @@ def create_encoder(latent_dim, input_shape, sigma=0.0):
     sampler = create_sampler(sigma)
     xi = sampler(xi_mean)
 
-    return Model(encoder_iput, xi, name='encoder')
+    return Model(encoder_input, xi, name='encoder')
+
+def create_wc_encoder(latent_dim, input_shape):
+    '''
+    Creates a convolutional encoder model for well contorl.
+
+    '''
+    encoder_input = Input(shape=input_shape, name='image')
+
+    x = conv_bn_relu(16, 3, 3, stride=(2, 2))(encoder_input)
+    x = conv_bn_relu(32, 3, 3, stride=(1, 1))(x)
+    x = conv_bn_relu(64, 3, 3, stride=(2, 2))(x)
+    x = conv_bn_relu(128, 3, 3, stride=(1, 1))(x)
+
+    for i in range(3):
+        x = res_conv(128, 3, 3)(x)
+
+    x = Flatten()(x)
+
+    xi = Dense(latent_dim, name='t_mean')(x)
+
+    return Model(encoder_input, xi, name='wc_encoder')
 
 
 def create_decoder(latent_dim, input_shape):
